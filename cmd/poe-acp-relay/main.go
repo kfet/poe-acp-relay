@@ -21,13 +21,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kfet/fir/internal/poeacp"
-	"github.com/kfet/fir/internal/poeacp/acpclient"
-	"github.com/kfet/fir/internal/poeacp/httpsrv"
-	"github.com/kfet/fir/internal/poeacp/poeproto"
-	"github.com/kfet/fir/internal/poeacp/policy"
-	"github.com/kfet/fir/internal/poeacp/router"
+	"github.com/kfet/fir/external/poeacp/internal/acpclient"
+	"github.com/kfet/fir/external/poeacp/internal/httpsrv"
+	"github.com/kfet/fir/external/poeacp/internal/poeproto"
+	"github.com/kfet/fir/external/poeacp/internal/policy"
+	"github.com/kfet/fir/external/poeacp/internal/router"
 )
+
+// version is set via -ldflags at build time.
+var version = "0.0.0-dev"
 
 func main() {
 	var (
@@ -41,13 +43,13 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Println(poeacp.Version)
+		fmt.Println(version)
 		return
 	}
 
 	log.SetOutput(os.Stderr)
 	log.SetFlags(log.Ltime | log.Lmicroseconds)
-	log.Printf("poe-acp-relay %s starting", poeacp.Version)
+	log.Printf("poe-acp-relay %s starting", version)
 
 	pol, err := policy.Parse(*permission)
 	if err != nil {

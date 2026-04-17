@@ -7,8 +7,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/kfet/fir/internal/poeacp/poeproto"
-	"github.com/kfet/fir/internal/poeacp/router"
+	"github.com/kfet/fir/external/poeacp/internal/poeproto"
+	"github.com/kfet/fir/external/poeacp/internal/router"
 )
 
 // Handler is the /poe HTTP handler.
