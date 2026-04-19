@@ -33,6 +33,7 @@ func main() {
 		stateDirFlag = flag.String("state-dir", "", "Per-conv state dir root (default: $XDG_STATE_HOME/poe-acp-relay)")
 		permission   = flag.String("permission", "allow-all", "Permission policy: allow-all|read-only|deny-all")
 		accessKeyEnv = flag.String("access-key-env", "POEACP_ACCESS_KEY", "Env var holding the Poe bearer secret")
+		poePath      = flag.String("poe-path", "/poe", "HTTP path for the Poe protocol endpoint")
 		introMsg     = flag.String("introduction", "poe-acp-relay: ACP-backed bot.", "Poe introduction message")
 		ttl          = flag.Duration("session-ttl", 2*time.Hour, "Idle TTL before a conv session is evicted")
 		gcEvery      = flag.Duration("gc-interval", 5*time.Minute, "GC sweep interval")
@@ -128,7 +129,13 @@ func main() {
 	})
 
 	mux := http.NewServeMux()
-	mux.Handle("/poe", poeproto.BearerAuth(secret, h))
+	poeHandler := poeproto.BearerAuth(secret, h)
+	mux.Handle(*poePath, poeHandler)
+	if *poePath != "/poe" {
+		// Also serve at /poe so integration tests and local curl work
+		// regardless of deploy-specific path mapping.
+		mux.Handle("/poe", poeHandler)
+	}
 	mux.Handle("/debug/sessions", poeproto.BearerAuth(secret, httpsrv.DebugHandler(rtr)))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(w, "ok sessions=%d\n", rtr.Len())

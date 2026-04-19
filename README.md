@@ -47,6 +47,7 @@ Point your Poe bot at `https://<host>/poe` (with any reverse proxy or
 
 ```
 --http-addr            HTTP listen address (default :8080)
+--poe-path             HTTP path for the Poe protocol endpoint (default /poe)
 --agent-cmd            ACP agent command + args (default "fir --mode acp")
 --agent-dir            FIR_AGENT_DIR passed to the child (default inherit)
 --state-dir            Per-conv state root (default $XDG_STATE_HOME/poe-acp-relay)
