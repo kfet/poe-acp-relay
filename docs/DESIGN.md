@@ -223,6 +223,13 @@ Single binary on a tailnet node, fronted by either:
 The Poe bot dashboard URL points at `https://<node>.<tailnet>.ts.net/poe`.
 Bearer secret lives in the host environment.
 
+**Funnel gotcha:** `tailscale funnel --set-path=/prefix` **strips the
+prefix** before proxying to the backend. If multiple bots share a node
+via path routing, the Poe URL must still include a path the relay
+actually registers. Given the default `--poe-path /poe`, a bot mounted
+under `/poe-acp` needs its Poe URL set to `/poe-acp/poe` (not bare
+`/poe-acp`). See `README.md` → "Deployment" for a concrete example.
+
 ## Future
 
 - **Per-user auth/state config.** Map Poe `user_id` to a scoped config

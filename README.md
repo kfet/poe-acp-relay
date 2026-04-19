@@ -36,6 +36,82 @@ POEACP_ACCESS_KEY=mysecret ./test/smoke.sh
 Point your Poe bot at `https://<host>/poe` (with any reverse proxy or
 `tailscale funnel` fronting the plain HTTP port).
 
+## Deployment
+
+### Single bot behind Tailscale Funnel (recommended)
+
+The host just needs `tailscale funnel` enabled. The relay listens on a
+loopback port; Funnel exposes it publicly with a valid cert.
+
+```bash
+# 1. Enable funnel for the default path (if not already).
+tailscale funnel --bg 127.0.0.1:8080
+
+# 2. Set the Poe bot's Server URL (in the Poe dashboard) to:
+#      https://<host>.<tailnet>.ts.net/poe
+#    and copy the generated Access Key.
+
+# 3. Start the relay with that key in env.
+export POEACP_ACCESS_KEY=<key-from-poe-dashboard>
+./bin/poe-acp-relay --http-addr 127.0.0.1:8080 --agent-cmd "fir --mode acp"
+```
+
+### Multiple bots on one host (path-based routing)
+
+Several bots (e.g. the MCP bridge at `external/poe` and this relay) can
+share a Tailscale node by mapping each to a distinct path. `tailscale
+funnel --set-path=<prefix>` routes a URL prefix to a local port and
+**strips the prefix before proxying**. Because of the strip, the Poe
+bot's server URL must include a trailing path that the relay actually
+registers (`/poe` by default).
+
+Concrete example used in our deployment:
+
+```bash
+# Existing MCP bridge on :8080 under /
+#   (already set up via `tailscale funnel 127.0.0.1:8080`)
+
+# Add the ACP relay on :8081 under /poe-acp/*
+tailscale funnel --bg --set-path=/poe-acp 127.0.0.1:8081
+
+# Start the relay. --poe-path is optional; /poe is always served as a
+# fallback so tests keep working regardless.
+POEACP_ACCESS_KEY=<key> ./bin/poe-acp-relay \
+  --http-addr 127.0.0.1:8081 \
+  --poe-path /poe-acp \
+  --agent-cmd "fir --mode acp"
+```
+
+**Poe dashboard URL** for this bot:
+
+```
+https://<host>.<tailnet>.ts.net/poe-acp/poe
+```
+
+That resolves, via Funnel, to the relay's `/poe` handler. (Without the
+`/poe` suffix the URL would become `/` after the prefix strip, which
+the relay doesn't serve and returns 404.)
+
+Verify end-to-end:
+
+```bash
+curl -sS -H "Authorization: Bearer $POEACP_ACCESS_KEY" \
+     -H 'Content-Type: application/json' \
+     -d '{"type":"settings"}' \
+     "https://<host>.<tailnet>.ts.net/poe-acp/poe"
+# → {"allow_attachments":false,"introduction_message":"..."}
+
+curl -sS -H "Authorization: Bearer $POEACP_ACCESS_KEY" \
+     "https://<host>.<tailnet>.ts.net/poe-acp/debug/sessions"
+# → {"count":0,"sessions":[]}
+```
+
+### Auto-restart on the host (not yet automated)
+
+v1 runs under `nohup` / a tmux window and must be restarted by hand
+on host reboot. A launchd / systemd unit is a straightforward M2
+follow-up; a template will land alongside the first production deploy.
+
 ## Endpoints
 
 | Path                   | Auth   | Purpose                                |
