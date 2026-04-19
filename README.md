@@ -5,7 +5,8 @@ as a pure ACP client. One binary, no MCP server surface. Each Poe
 `conversation_id` maps 1:1 to an ACP session inside a shared agent process.
 
 See [docs/poe-acp-relay/DESIGN.md](docs/poe-acp-relay/DESIGN.md) for the full
-design, scope, and milestones.
+design, scope, and milestones. For the underlying Poe wire protocol see
+[docs/poe-acp-relay/poe-protocol-reference.md](docs/poe-acp-relay/poe-protocol-reference.md).
 
 Module: `github.com/kfet/fir/external/poeacp`. Standalone — not linked into
 the main fir binary.
