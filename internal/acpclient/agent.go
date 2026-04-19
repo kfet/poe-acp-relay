@@ -4,9 +4,14 @@
 // server-initiated calls back into the relay (session updates, permission
 // requests, fs reads/writes).
 //
-// This is a skeleton; it compiles and exposes the shape of the final API,
-// but does not yet drive a real agent end-to-end. See M1 milestone in
-// docs/poe-acp-relay/DESIGN.md.
+// One AgentProc runs one ACP child process. It can serve many sessions
+// concurrently — each NewSession registers a per-session sink that receives
+// the stream of session/update notifications.
+//
+// Security: the fs methods (ReadTextFile / WriteTextFile) currently do not
+// sandbox paths to the session's cwd. That is adequate for the v1 use case
+// (one trusted agent binary per relay process) but should be tightened
+// before exposing the relay to untrusted agents. See DESIGN.md "Future".
 package acpclient
 
 import (
@@ -18,6 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	acp "github.com/coder/acp-go-sdk"
 )
@@ -149,13 +155,24 @@ func (a *AgentProc) Cancel(ctx context.Context, sid acp.SessionId) error {
 	return a.conn.Cancel(ctx, acp.CancelNotification{SessionId: sid})
 }
 
-// Close terminates the agent process.
+// Close terminates the agent process. Returns after the process has
+// exited (or been force-killed).
 func (a *AgentProc) Close() error {
-	if a.cmd != nil && a.cmd.Process != nil {
-		_ = a.cmd.Process.Kill()
-		_ = a.cmd.Wait()
+	if a.cmd == nil || a.cmd.Process == nil {
+		return nil
 	}
-	return nil
+	// Try a gentle stop first; fall through to Kill after a short grace.
+	_ = a.cmd.Process.Signal(os.Interrupt)
+	done := make(chan error, 1)
+	go func() { done <- a.cmd.Wait() }()
+	select {
+	case <-done:
+		return nil
+	case <-time.After(2 * time.Second):
+		_ = a.cmd.Process.Kill()
+		<-done
+		return nil
+	}
 }
 
 // ---- acp.Client implementation (server-initiated calls from the agent) ----

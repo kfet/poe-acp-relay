@@ -16,9 +16,13 @@ import (
 
 // Config configures a Handler.
 type Config struct {
-	Router            *router.Router
-	Settings          poeproto.SettingsResponse
-	HeartbeatInterval time.Duration // 0 disables heartbeat
+	Router *router.Router
+	// Settings is the static response for `settings` requests. Commands
+	// may be overridden per-request by CommandsProvider.
+	Settings poeproto.SettingsResponse
+	// HeartbeatInterval is the SSE heartbeat tick while waiting for the
+	// first agent chunk. <=0 disables the heartbeat.
+	HeartbeatInterval time.Duration
 	// CommandsProvider, if set, is called on each `settings` request to
 	// populate SettingsResponse.Commands with the current agent command
 	// names. If nil, Settings.Commands is used as-is.
@@ -30,11 +34,9 @@ type Handler struct {
 	cfg Config
 }
 
-// New creates a Handler.
+// New creates a Handler. HeartbeatInterval <=0 disables heartbeat;
+// otherwise no defaulting is applied — pass an explicit value.
 func New(cfg Config) *Handler {
-	if cfg.HeartbeatInterval == 0 {
-		cfg.HeartbeatInterval = 10 * time.Second
-	}
 	return &Handler{cfg: cfg}
 }
 
@@ -103,17 +105,22 @@ func (h *Handler) handleQuery(ctx context.Context, w http.ResponseWriter, req *p
 	s := newSink(sse, h.cfg.HeartbeatInterval)
 	defer s.stop()
 
-	// Cancel propagation: if the HTTP client goes away, issue ACP
-	// session/cancel so fir stops burning tokens.
-	promptCtx, cancelPrompt := context.WithCancel(ctx)
-	defer cancelPrompt()
+	// Cancel propagation: if the HTTP client goes away while a prompt
+	// is in flight, issue ACP session/cancel so the agent stops burning
+	// tokens. Once the prompt returns (clean or error), stop watching —
+	// we don't want to cancel a session that has already completed.
+	done := make(chan struct{})
 	go func() {
-		<-ctx.Done()
-		_ = h.cfg.Router.Cancel(context.Background(), req.ConversationID)
-		cancelPrompt()
+		select {
+		case <-ctx.Done():
+			_ = h.cfg.Router.Cancel(context.Background(), req.ConversationID)
+		case <-done:
+		}
 	}()
 
-	if err := h.cfg.Router.Prompt(promptCtx, req.ConversationID, req.UserID, text, s); err != nil {
+	err = h.cfg.Router.Prompt(ctx, req.ConversationID, req.UserID, text, s)
+	close(done)
+	if err != nil {
 		log.Printf("router prompt (conv=%s): %v", req.ConversationID, err)
 	}
 }
@@ -134,6 +141,9 @@ func newSink(w *poeproto.SSEWriter, hb time.Duration) *sink {
 	if hb > 0 {
 		go s.heartbeat(hb)
 	} else {
+		// Heartbeat disabled: mark as already-stopped so stop()/FirstChunk()
+		// are no-ops and don't double-close the channel.
+		s.stopped.Store(true)
 		close(s.hbDone)
 	}
 	return s
